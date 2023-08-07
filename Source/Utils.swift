@@ -1,11 +1,3 @@
-//
-//  Utils.swift
-//  PopupView
-//
-//  Created by Alisa Mylnikova on 01.06.2022.
-//  Copyright © 2022 Exyte. All rights reserved.
-//
-
 import SwiftUI
 import Combine
 
@@ -22,13 +14,12 @@ final class ClassReference<T> {
 }
 
 extension View {
-
     @ViewBuilder
     func valueChanged<T: Equatable>(value: T, onChange: @escaping (T) -> Void) -> some View {
         if #available(iOS 14.0, tvOS 14.0, macOS 11.0, watchOS 7.0, *) {
             self.onChange(of: value, perform: onChange)
         } else {
-            self.onReceive(Just(value)) { value in
+            onReceive(Just(value)) { value in
                 onChange(value)
             }
         }
@@ -46,12 +37,12 @@ extension View {
     }
 
     @ViewBuilder
-    func addTapIfNotTV(if condition: Bool, onTap: @escaping ()->()) -> some View {
-#if os(tvOS)
+    func addTapIfNotTV(if condition: Bool, onTap: @escaping () -> Void) -> some View {
+        #if os(tvOS)
         self
-#else
+        #else
         if condition {
-            self.gesture(
+            gesture(
                 TapGesture().onEnded {
                     onTap()
                 }
@@ -59,14 +50,13 @@ extension View {
         } else {
             self
         }
-#endif
+        #endif
     }
 }
 
 // MARK: - FrameGetter
 
 struct FrameGetter: ViewModifier {
-
     @Binding var frame: CGRect
 
     func body(content: Content) -> some View {
@@ -76,8 +66,8 @@ struct FrameGetter: ViewModifier {
                     DispatchQueue.main.async {
                         let rect = proxy.frame(in: .global)
                         // This avoids an infinite layout loop
-                        if rect.integral != self.frame.integral {
-                            self.frame = rect
+                        if rect.integral != frame.integral {
+                            frame = rect
                         }
                     }
                     return AnyView(EmptyView())
@@ -86,14 +76,13 @@ struct FrameGetter: ViewModifier {
     }
 }
 
-internal extension View {
-    func frameGetter(_ frame: Binding<CGRect>) -> some View {
+extension View {
+    internal func frameGetter(_ frame: Binding<CGRect>) -> some View {
         modifier(FrameGetter(frame: frame))
     }
 }
 
 struct SafeAreaGetter: ViewModifier {
-
     @Binding var safeArea: EdgeInsets
 
     func body(content: Content) -> some View {
@@ -103,8 +92,8 @@ struct SafeAreaGetter: ViewModifier {
                     DispatchQueue.main.async {
                         let area = proxy.safeAreaInsets
                         // This avoids an infinite layout loop
-                        if area != self.safeArea {
-                            self.safeArea = area
+                        if area != safeArea {
+                            safeArea = area
                         }
                     }
                     return AnyView(EmptyView())
@@ -121,16 +110,20 @@ extension View {
 
 // MARK: - AnimationCompletionObserver
 
-struct AnimationCompletionObserverModifier<Value>: AnimatableModifier where Value: VectorArithmetic, Value: Comparable {
-
-    /// While animating, SwiftUI changes the old input value to the new target value using this property. This value is set to the old value until the animation completes.
+struct AnimationCompletionObserverModifier<Value>: AnimatableModifier where Value: VectorArithmetic,
+    Value: Comparable
+{
+    /// While animating, SwiftUI changes the old input value to the new target value using this
+    /// property. This value is set to the old value until the animation completes.
     var animatableData: Value {
         didSet {
             notifyCompletionIfFinished()
         }
     }
 
-    /// The target value for which we're observing. This value is directly set once the animation starts. During animation, `animatableData` will hold the oldValue and is only updated to the target value once the animation completes.
+    /// The target value for which we're observing. This value is directly set once the animation
+    /// starts. During animation, `animatableData` will hold the oldValue and is only updated to the
+    /// target value once the animation completes.
     private var targetValue: Value
 
     /// The completion callback which is called once the animation completes.
@@ -138,29 +131,30 @@ struct AnimationCompletionObserverModifier<Value>: AnimatableModifier where Valu
 
     init(observedValue: Value, completion: @escaping () -> Void) {
         self.completion = completion
-        self.animatableData = observedValue
+        animatableData = observedValue
         targetValue = observedValue
     }
 
-    /// Verifies whether the current animation is finished and calls the completion callback if true.
+    /// Verifies whether the current animation is finished and calls the completion callback if
+    /// true.
     private func notifyCompletionIfFinished() {
         guard animatableData == targetValue else { return }
 
         /// Dispatching is needed to take the next runloop for the completion callback.
-        /// This prevents errors like "Modifying state during view update, this will cause undefined behavior."
+        /// This prevents errors like "Modifying state during view update, this will cause undefined
+        /// behavior."
         DispatchQueue.main.async {
-            self.completion()
+            completion()
         }
     }
 
     func body(content: Content) -> some View {
         /// We're not really modifying the view so we can directly return the original input value.
-        return content
+        content
     }
 }
 
 struct AnimatableModifierDouble: AnimatableModifier {
-
     var targetValue: Double
     static var done = false
 
@@ -170,29 +164,31 @@ struct AnimatableModifierDouble: AnimatableModifier {
             checkIfFinished()
         }
     }
-    var completion: () -> ()
+
+    var completion: () -> Void
 
     // Re-created every time the control argument changes
-    init(bindedValue: Double, completion: @escaping () -> ()) {
+    init(bindedValue: Double, completion: @escaping () -> Void) {
         self.completion = completion
 
         // Set animatableData to the new value. But SwiftUI again directly
         // and gradually varies the value while the body
         // is being called to animate. Following line serves the purpose of
         // associating the extenal argument with the animatableData.
-        self.animatableData = bindedValue
+        animatableData = bindedValue
         targetValue = bindedValue
         AnimatableModifierDouble.done = false
     }
 
-    func checkIfFinished() -> () {
+    func checkIfFinished() {
         if AnimatableModifierDouble.done { return }
         let delta = 0.1
-        if animatableData > targetValue - delta &&
-            animatableData < targetValue + delta {
+        if animatableData > targetValue - delta,
+           animatableData < targetValue + delta
+        {
             AnimatableModifierDouble.done = true
             DispatchQueue.main.async {
-                self.completion()
+                completion()
             }
         }
     }
@@ -203,7 +199,6 @@ struct AnimatableModifierDouble: AnimatableModifier {
 }
 
 extension View {
-
     func onAnimationCompleted(for value: Double, completion: @escaping () -> Void) -> some View {
         modifier(AnimatableModifierDouble(bindedValue: value, completion: completion))
     }
@@ -214,20 +209,24 @@ extension View {
 #if os(iOS)
 
 extension View {
-
-    func transparentNonAnimatingFullScreenCover<Content: View>(isPresented: Binding<Bool>, content: @escaping () -> Content) -> some View {
-        modifier(TransparentNonAnimatableFullScreenModifier(isPresented: isPresented, fullScreenContent: content))
+    func transparentNonAnimatingFullScreenCover<Content: View>(
+        isPresented: Binding<Bool>,
+        content: @escaping () -> Content
+    ) -> some View {
+        modifier(TransparentNonAnimatableFullScreenModifier(
+            isPresented: isPresented,
+            fullScreenContent: content
+        ))
     }
 }
 
 private struct TransparentNonAnimatableFullScreenModifier<FullScreenContent: View>: ViewModifier {
-
     @Binding var isPresented: Bool
     let fullScreenContent: () -> (FullScreenContent)
 
     func body(content: Content) -> some View {
         content
-            .onChange(of: isPresented) { isPresented in
+            .onChange(of: isPresented) { _ in
                 UIView.setAnimationsEnabled(false)
             }
             .fullScreenCover(isPresented: $isPresented, content: {
@@ -250,23 +249,19 @@ private struct TransparentNonAnimatableFullScreenModifier<FullScreenContent: Vie
 }
 
 private struct FullScreenCoverBackgroundRemovalView: UIViewRepresentable {
-
     private class BackgroundRemovalView: UIView {
-
         override func didMoveToWindow() {
             super.didMoveToWindow()
 
             superview?.superview?.backgroundColor = .clear
         }
-
     }
 
     func makeUIView(context: Context) -> UIView {
-        return BackgroundRemovalView()
+        BackgroundRemovalView()
     }
 
     func updateUIView(_ uiView: UIView, context: Context) {}
-
 }
 
 #endif
@@ -276,28 +271,32 @@ private struct FullScreenCoverBackgroundRemovalView: UIViewRepresentable {
 #if os(iOS)
 
 class KeyboardHeightHelper: ObservableObject {
-
     @Published var keyboardHeight: CGFloat = 0
-    @Published var keyboardDisplayed: Bool = false
+    @Published var keyboardDisplayed = false
 
     init() {
-        self.listenForKeyboardNotifications()
+        listenForKeyboardNotifications()
     }
 
     private func listenForKeyboardNotifications() {
-        NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillShowNotification,
-                                               object: nil,
-                                               queue: .main) { (notification) in
+        NotificationCenter.default.addObserver(
+            forName: UIResponder.keyboardWillShowNotification,
+            object: nil,
+            queue: .main
+        ) { notification in
             guard let userInfo = notification.userInfo,
-                  let keyboardRect = userInfo[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
+                  let keyboardRect = userInfo[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect
+            else { return }
 
             self.keyboardHeight = keyboardRect.height
             self.keyboardDisplayed = true
         }
 
-        NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillHideNotification,
-                                               object: nil,
-                                               queue: .main) { (notification) in
+        NotificationCenter.default.addObserver(
+            forName: UIResponder.keyboardWillHideNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
             self.keyboardHeight = 0
             self.keyboardDisplayed = false
         }
@@ -307,29 +306,28 @@ class KeyboardHeightHelper: ObservableObject {
 #else
 
 class KeyboardHeightHelper: ObservableObject {
-
     @Published var keyboardHeight: CGFloat = 0
-    @Published var keyboardDisplayed: Bool = false
+    @Published var keyboardDisplayed = false
 }
 
 #endif
 
 extension CGPoint {
-
     static var pointFarAwayFromScreen: CGPoint {
-        CGPoint(x: 2*CGSize.screenSize.width, y: 2*CGSize.screenSize.height)
+        CGPoint(x: 2 * CGSize.screenSize.width, y: 2 * CGSize.screenSize.height)
     }
 }
 
 extension CGSize {
-
     static var screenSize: CGSize {
-#if os(iOS) || os(tvOS)
+        #if os(visionOS)
+        return CGSize.zero
+        #elseif os(iOS) || os(tvOS)
         return UIScreen.main.bounds.size
-#elseif os(watchOS)
+        #elseif os(watchOS)
         return WKInterfaceDevice.current().screenBounds.size
-#elseif os(macOS)
+        #elseif os(macOS)
         return NSScreen.main?.frame.size ?? .zero
-#endif
+        #endif
     }
 }

@@ -403,7 +403,9 @@ public struct Popup<PopupContent: View>: ViewModifier {
     }
 
     var screenSize: CGSize {
-#if os(iOS)
+#if os(visionOS)
+        return CGSize(width: presenterContentRect.size.width, height: presenterContentRect.size.height - presenterContentRect.minY)
+#elseif os(iOS)
         return UIScreen.main.bounds.size
 #elseif os(watchOS)
         return WKInterfaceDevice.current().screenBounds.size
